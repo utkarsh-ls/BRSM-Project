@@ -1,0 +1,58 @@
+---
+title: "FactorAnalysis"
+author: "Utkarsh Upadhyay"
+date: "2023-05-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readxl")
+```
+
+```{r}
+ds_file <- "dataset.csv"
+data <- read.csv(ds_file)
+```
+
+```{r}
+catergorical_features <- c('Marital.status', 'Application.mode', 'Course', 'Daytime.evening.attendance', 'Previous.qualification', 'Nacionality', "Mother.s.qualification", "Father.s.qualification", "Mother.s.occupation", "Father.s.occupation", 'Displaced', 'Educational.special.needs', 'Debtor', 'Tuition.fees.up.to.date', 'Gender', 'Scholarship.holder', 'International', 'Target')
+```
+
+```{r}
+# Convert binary catergorical features to binary numerical and drop the rest
+for (feature in catergorical_features) {
+  if (length(unique(data[[feature]])) == 2) {
+    data[[feature]] <- as.numeric(data[[feature]])
+  } else {
+    data[[feature]] <- NULL
+  }
+}
+```
+
+```{r}
+# Write code to create a scree plot for the above data
+correlation_matrix <- cor(data)
+eigen_values <- eigen(correlation_matrix)$values
+# Count the number of eigen values greater than 1
+factors <- sum(eigen_values > 1)
+
+# Scree plot
+plot(eigen_values, type = "b", main = "Scree Plot", xlab = "Factor", ylab = "Eigenvalue")
+abline(h = 1, col = "red")
+```
+
+```{r}
+# Factor analysis
+library(stats)
+fa <- factanal(data, factors = factors, lower = 0.03)
+fa
+```
+
+```{r}
+# Communalities and Uniqueness
+uniqueness <- fa$uniqueness
+communalities <- 1 - uniqueness
+data.frame(communalities)
+data.frame(uniqueness)
+```

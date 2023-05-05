@@ -1,0 +1,458 @@
+---
+title: "project"
+author: "Utkarsh Upadhyay"
+date: "2023-04-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("effsize")
+library("readxl")
+library("car")
+library("rstatix")
+library("ggplot2")
+```
+
+```{r}
+ds_file <- "dataset.csv"
+data <- read.csv(ds_file)
+```
+# Hypothesis 1
+
+```{r}
+data$grades <- data$Curricular.units.1st.sem..grade. + data$Curricular.units.2nd.sem..grade.
+grades_wos <- data$grades[data$Scholarship.holder == 0]
+grades_ws <- data$grades[data$Scholarship.holder == 1]
+
+qqnorm(grades_ws, main="QQplot for Grades With Scholarship")
+qqline(grades_ws)
+
+shapiro.test(grades_ws)
+```
+
+```{r}
+qqnorm(grades_wos, main="QQplot for Grades Without Scholarship")
+qqline(grades_wos)
+
+shapiro.test(grades_wos)
+```
+
+```{r}
+data$Scholarship.holder <- as.factor(data$Scholarship.holder)
+ggplot(data, aes(x = grades, fill = Scholarship.holder)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for Grades of Scholarship holders and non-holders",
+    x = "Grades",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(grades_wos, na.rm = TRUE)), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades_ws, na.rm = TRUE)), color = "blue", linetype = "dashed", size = 1)
+```
+
+```{r}
+print("Mean grade of scholarship holders: ")
+mean(grades_ws)
+print("Mean grade of non-scholarship holders: ")
+mean(grades_wos)
+wilcox.test(grades_ws, grades_wos, alternative = "g")
+# 
+cohen.d(grades_ws, grades_wos)
+```
+## Conculsion
+
+We reject null hypothesis that scholarship holders does not get greater marks than students with no scholarship.
+
+
+# Hypothesis 2
+
+## Course vs Tuition fee 
+```{r}
+course <- data$Course
+tuition <- data$Tuition.fees.up.to.date
+
+contigency.table <- table(tuition, course)
+print(contigency.table)
+
+expected <- outer(
+  rowSums(contigency.table),
+  colSums(contigency.table)
+) / sum(contigency.table)
+rownames(expected) <- c("No tuition", "Tuition")
+round(expected, 2)
+
+result <- chisq.test(contigency.table, simulate.p.value = TRUE)
+
+print(result)
+
+# effect size
+effect.size <- sqrt(result$statistic / (sum(contigency.table)))
+print(effect.size)
+
+residuals <- contigency.table - expected
+rownames(residuals) <- c("No tuition", "Tuition")
+residuals
+colSums(expected)
+residuals <- round(t(t(residuals) / colSums(expected)), 2)
+residuals
+
+plot(residuals)
+```
+
+## Grades vs Tuition fee
+  
+```{r}
+grades_w_fee <- data$grades[data$Tuition.fees.up.to.date == 1]
+grades_wo_fee <- data$grades[data$Tuition.fees.up.to.date == 0]
+
+qqnorm(grades_w_fee)
+qqline(grades_w_fee)
+title("QQplot for Grades With Tuition fee upto date")
+
+shapiro.test(grades_w_fee)
+
+qqnorm(grades_wo_fee)
+qqline(grades_wo_fee)
+title("QQplot for Grades Without Tuition fee upto date")
+
+shapiro.test(grades_wo_fee)
+```
+
+As we can see the data is not normal.
+```{r}
+data$Tuition.fees.up.to.date <- as.factor(data$Tuition.fees.up.to.date)
+ggplot(data, aes(x = grades, fill = Tuition.fees.up.to.date)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for Grades of Students with and \
+    without tuition fee upto date",
+    x = "Grades",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(grades_wo_fee, na.rm = TRUE)),
+    color = "red", linetype = "dashed", size = 1
+  ) +
+  geom_vline(aes(xintercept = mean(grades_w_fee, na.rm = TRUE)),
+    color = "blue", linetype = "dashed", size = 1
+  )
+```
+
+```{r}
+print("Mean grade of students with tuition fee upto date: ")
+mean(grades_w_fee)
+print("Mean grade of students without tuition fee upto date: ")
+mean(grades_wo_fee)
+wilcox.test(grades_w_fee, grades_wo_fee)
+cohen.d(grades_w_fee, grades_wo_fee)
+```
+
+Since the p-value is less than 0.05, we reject the null hypothesis that students with tuition fee upto date do get different marks than students without tuition fee upto date.
+
+# Hypothesis 3
+
+## Total grades
+
+```{r}
+# Covnert sem1 grades to numeric
+data$grades <- as.numeric(data$grades)
+
+dropout.grades <- data$grades[data$Target == "Dropout"]
+graduate.grades <- data$grades[data$Target == "Graduate"]
+enrolled.grades <- data$grades[data$Target == "Enrolled"]
+
+shapiro.test(dropout.grades)
+shapiro.test(graduate.grades)
+shapiro.test(enrolled.grades)
+
+## Not normal
+```
+
+```{r}
+# Perform Kruskal-Wallis ANOVA test
+kruskal.test(grades ~ Target, data = data)
+```
+
+# As the p-value is less than the significance level 0.05, we can conclude that there are significant differences between the Target groups.
+
+```{r}
+# Perform Mann-Whitney U post-hoc test
+pairwise.wilcox.test(data$grades, data$Target, p.adjust.method = "bonferroni")
+
+# Effect size of Kruskal-Wallis test
+kruskal_effsize(data, grades ~ Target)
+```
+
+```{r}
+# Density-plots for all targets (using ggplot2)
+ggplot(data, aes(x = grades, fill = Target)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for grades of different targets",
+    x = "Grades",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(dropout.grades, na.rm = TRUE)), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(graduate.grades, na.rm = TRUE)), color = "green", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(enrolled.grades, na.rm = TRUE)), color = "blue", linetype = "dashed", size = 1)
+```
+
+## First-sem grades
+
+```{r}
+# Covnert sem1 grades to numeric
+data$Curricular.units.1st.sem..grade. <- as.numeric(data$Curricular.units.1st.sem..grade.)
+
+dropout.Curricular.units.1st.sem..grade. <- data$Curricular.units.1st.sem..grade.[data$Target == "Dropout"]
+graduate.Curricular.units.1st.sem..grade. <- data$Curricular.units.1st.sem..grade.[data$Target == "Graduate"]
+enrolled.Curricular.units.1st.sem..grade. <- data$Curricular.units.1st.sem..grade.[data$Target == "Enrolled"]
+
+shapiro.test(dropout.Curricular.units.1st.sem..grade.)
+shapiro.test(graduate.Curricular.units.1st.sem..grade.)
+shapiro.test(enrolled.Curricular.units.1st.sem..grade.)
+
+## Not normal
+```
+
+```{r}
+# Perform Kruskal-Wallis ANOVA test
+kruskal.test(Curricular.units.1st.sem..grade. ~ Target, data = data)
+```
+
+# As the p-value is less than the significance level 0.05, we can conclude that there are significant differences between the Target groups.
+
+```{r}
+# Perform Mann-Whitney U post-hoc test
+pairwise.wilcox.test(data$Curricular.units.1st.sem..grade., data$Target, p.adjust.method = "bonferroni")
+
+# Effect size of Kruskal-Wallis test
+kruskal_effsize(data, Curricular.units.1st.sem..grade. ~ Target)
+```
+
+```{r}
+# Density-plots for all targets (using ggplot2)
+ggplot(data, aes(x = Curricular.units.1st.sem..grade., fill = Target)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for Curricular.units.1st.sem..grade. of different targets",
+    x = "Curricular.units.1st.sem..grade.",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(dropout.Curricular.units.1st.sem..grade., na.rm = TRUE)), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(graduate.Curricular.units.1st.sem..grade., na.rm = TRUE)), color = "green", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(enrolled.Curricular.units.1st.sem..grade., na.rm = TRUE)), color = "blue", linetype = "dashed", size = 1)
+```
+
+## Second-sem grades
+
+```{r}
+# Covnert sem1 grades to numeric
+data$Curricular.units.2nd.sem..grade. <- as.numeric(data$Curricular.units.2nd.sem..grade.)
+
+dropout.Curricular.units.2nd.sem..grade. <- data$Curricular.units.2nd.sem..grade.[data$Target == "Dropout"]
+graduate.Curricular.units.2nd.sem..grade. <- data$Curricular.units.2nd.sem..grade.[data$Target == "Graduate"]
+enrolled.Curricular.units.2nd.sem..grade. <- data$Curricular.units.2nd.sem..grade.[data$Target == "Enrolled"]
+
+shapiro.test(dropout.Curricular.units.2nd.sem..grade.)
+shapiro.test(graduate.Curricular.units.2nd.sem..grade.)
+shapiro.test(enrolled.Curricular.units.2nd.sem..grade.)
+
+## Not normal
+```
+
+```{r}
+# Perform Kruskal-Wallis ANOVA test
+kruskal.test(Curricular.units.2nd.sem..grade. ~ Target, data = data)
+```
+
+As the p-value is less than the significance level 0.05, we can conclude that there are significant differences between the Target groups.
+
+```{r}
+# Perform Mann-Whitney U post-hoc test
+pairwise.wilcox.test(data$Curricular.units.2nd.sem..grade., data$Target, p.adjust.method = "bonferroni")
+
+# Effect size of Kruskal-Wallis test
+kruskal_effsize(data, Curricular.units.2nd.sem..grade. ~ Target)
+```
+
+```{r}
+# Density-plots for all targets (using ggplot2)
+ggplot(data, aes(x = Curricular.units.2nd.sem..grade., fill = Target)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for Curricular.units.2nd.sem..grade. of different targets",
+    x = "Curricular.units.2nd.sem..grade.",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(dropout.Curricular.units.2nd.sem..grade., na.rm = TRUE)), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(graduate.Curricular.units.2nd.sem..grade., na.rm = TRUE)), color = "green", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(enrolled.Curricular.units.2nd.sem..grade., na.rm = TRUE)), color = "blue", linetype = "dashed", size = 1)
+```
+
+# ::: {.hypothesis #label name="hypothesis name"}
+
+:::
+
+# Hypothesis 4
+
+```{r}
+# from data, extract grades for each country in different arrays
+# and then perform Shapiro-Wilk test to check if the data is normal
+
+grades_wrt_country <- list()
+countries <- unique(data$Nacionality)
+countries <- countries[order(countries)]
+for (country in countries) {
+  print(country)
+  grades_wrt_country[[country]] <- data$grades[data$Nacionality == country]
+}
+
+# sort the list by length of the array
+# grades_wrt_country <- grades_wrt_country[order(sapply(grades_wrt_country, length), decreasing = TRUE)]
+
+lens <- sapply(grades_wrt_country, length)
+lens
+```
+Since some countries have very low number of students, we will not consider countries with less than 5 students.
+
+```{r}
+STUDENTS_CUTOFF <- 5
+
+# remove countries with less than 5 students
+grades_wrt_country <- grades_wrt_country[lens >= STUDENTS_CUTOFF]
+countries <- countries[lens >= STUDENTS_CUTOFF]
+data_country <- data[data$Nacionality %in% countries, ]
+
+# perform Shapiro-Wilk test on each country
+shapiro.test_results <- lapply(grades_wrt_country, shapiro.test)
+
+# check if the data is normal
+is_normal <- lapply(shapiro.test_results, function(x) x$p.value > 0.05)
+
+print("Countries with normal data:")
+print(countries[is_normal == TRUE])
+print("Countries with non-normal data:")
+print(countries[is_normal == FALSE])
+```
+Since only one country has normal data, normality of data does not hold.
+Hence, we will perform Kruskal-Wallis test on all countries.
+
+```{r}
+# perform Kruskal-Wallis test on all countries
+kruskal.test_results <- kruskal.test(grades ~ Nacionality, data = data_country)
+kruskal.test_results
+```
+
+```{r}
+# print means of each countries grades
+aggregate(grades ~ Nacionality, data = data_country, mean)
+
+# Density-plots for all countries in the array countries
+# with mean vertical lines
+dd <- data_country
+dd$Nacionality <- as.factor(dd$Nacionality)
+ggplot(dd, aes(x = grades, fill = Nacionality)) +
+  geom_density(alpha = 0.5) +
+  theme_bw() +
+  labs(
+    title = "Density plot for grades of different countries",
+    x = "grades",
+    y = "Density"
+  ) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 1],
+    na.rm = TRUE
+  )), color = "red", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 3],
+    na.rm = TRUE
+  )), color = "yellow", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 9],
+    na.rm = TRUE
+  )), color = "green", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 10],
+    na.rm = TRUE
+  )), color = "blue", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 12],
+    na.rm = TRUE
+  )), color = "#433bb2", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = mean(grades[data_country$Nacionality == 14],
+    na.rm = TRUE
+  )), color = "purple", linetype = "dashed", size = 1)
+```
+
+# Hypothesis 5
+
+```{r}
+debtors_age <- data$Age.at.enrollment[data$Debtor == 1]
+non_debtors_age <- data$Age.at.enrollment[data$Debtor == 0]
+all_ages <- data$Age.at.enrollment
+
+print("Lengths of debtors, non-debtors and all ages:")
+print(length(all_ages))
+print(length(debtors_age))
+print(length(non_debtors_age))
+
+print("Means of debtors, non-debtors and all ages:")
+mean(debtors_age)
+mean(non_debtors_age)
+mean(all_ages)
+
+print("Performing normality test:")
+shapiro.test(debtors_age)
+shapiro.test(non_debtors_age)
+shapiro.test(all_ages)
+
+```
+Since, the two categories with significantly different sample sizes, we would perform independent-samples randomization test.
+```{r}
+permsum <- replicate(10000, mean(sample(all_ages, length(debtors_age))))
+permsum <- c(permsum, mean(debtors_age))
+p_value <- sum(permsum >= mean(debtors_age)) / length(permsum)
+
+hist(permsum, )
+abline(v = mean(debtors_age), col = "red")
+abline(v = mean(non_debtors_age), col = "green")
+# add legend for ablines
+legend(
+  "topright",
+  legend = c("Mean of debtors", "Mean of non-debtors"),
+  col = c("red", "green"),
+  lty = 1,
+  cex = 0.8
+)
+p_value
+```
+Since, the p-value is less than 0.05, we reject the null hypothesis that debtors have lower age than non-debtors.
+
+```{r}
+# box plot of age of debtors and non-debtors
+data$Debtor <- as.factor(data$Debtor)
+ggplot(data, aes(x = Debtor, y = Age.at.enrollment)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(
+    title = "Box plot of age of debtors and non-debtors",
+    x = "Debtor",
+    y = "Age at enrollment"
+  )
+```
+
+```{r}
+```
+
+
+
+```{r}
+cohen.d(debtors_age, non_debtors_age)
+```
+We have small effect size.
+```{r}
+```
+
+```{r}
+
+```
